@@ -1,2 +1,2 @@
-# 414_hw6
-Repository for CSE 414 HW 6
+# vaccine-scheduler
+Repository for CSE414 SPR23 HW6
