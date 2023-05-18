@@ -13,7 +13,11 @@ class ConnectionManager:
 
     def create_connection(self):
         try:
-            self.conn = pymssql.connect(server=self.server_name, user=self.user, password=self.password, database=self.db_name)
+            self.conn = pymssql.connect(
+                                        server=self.server_name,
+                                        user=self.user,
+                                        password=self.password,
+                                        database=self.db_name)
         except pymssql.Error as db_err:
             print("Database Programming Error in SQL connection processing! ")
             print(db_err)
