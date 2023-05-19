@@ -1,14 +1,14 @@
 import pymssql
-import os
+from decouple import config
 
 
 class ConnectionManager:
 
     def __init__(self):
-        self.server_name = os.getenv("Server") + ".database.windows.net"
-        self.db_name = os.getenv("DBName")
-        self.user = os.getenv("UserID")
-        self.password = os.getenv("Password")
+        self.server_name = config('Server') + ".database.windows.net"
+        self.db_name = config('DBName')
+        self.user = config("UserID")
+        self.password = config("Password")
         self.conn = None
 
     def create_connection(self):
