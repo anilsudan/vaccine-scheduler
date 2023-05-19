@@ -7,22 +7,43 @@ Written using Python 3.10 (pymssql has bugs with 3.11 on arm64, might work for y
 
 ## Setup (macOS)
 
-1. Clone repository - `https://www.github.com/anilsudan/vaccine-scheduler.git`
-2. Install Dependencies
-    - pip: `python3 -m pip -r requirements.txt`
-    - Conda: `conda install pymssql; conda install -c conda-forge python-decouple`
-3. Create a `.env` file in the root directory containing the following information about your Azure SQL database
+1. Clone repository - `git clone https://www.github.com/anilsudan/vaccine-scheduler.git`
+
+
+2. Create environment - 
+   
+   venv - `cd vaccine-scheduler && python3 -m venv env`
+   
+   conda - `conda create vaccine-scheduler`
+
+
+3. Install dependencies
+
+   venv - `source env/bin/activate && pip3 -r requirements.txt`
+
+   conda - `conda activate vaccine-scheduler && conda install pymssql &&  conda install -c conda-forge python-decouple`
+
+
+4. Configure Database settings
+   
+   Create a file named `.env` in the root of the application directory, with the following information:
    ```commandline
-   Server=<Server name, without '.database.windows.net'>
-   DBName=<Database name>
-   UserID=<Database username>
-   Password=<Database password>
+   Server=<AZURE_SERVER_NAME>
+   DBName=<SQL_DB_NAME>
+   UserID=<DB_USERNAME>
+   Pass=<DB_PASS>
    ```
-4. Run `src/main/resources/create.sql` on your Azure SQL database.
+   The server name is the part of the domain name before ".database.windows.net"
+
+
+5. Run `src/main/resources/create.sql` on your Azure SQL database.
+
 
 ## Usage
 
-Run `src/main/scheduler/Scheduler.py`
+venv - `./run.sh`
+
+conda - `conda activate vaccine-scheduler && python3 src/main/scheduler/Scheduler.py`
 
 
 ## Todo
