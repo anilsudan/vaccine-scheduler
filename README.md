@@ -1,8 +1,9 @@
 # vaccine-scheduler
 
-Created for UW CSE414 HW6 (Spring 2023)
+Command-line application for scheduling COVID-19 vaccination appointments.  Written for CSE414 at UW in Spring 2023.
+Built from https://github.com/aaditya1004/vaccine-scheduler-python
 
-Designed to run on Python 3.10.11 using SQL Server
+Written using Python 3.10 (pymssql has bugs with 3.11 on arm64, might work for you though)
 
 ## Setup (macOS)
 
@@ -11,15 +12,19 @@ Designed to run on Python 3.10.11 using SQL Server
     - pip: `python3 -m pip -r requirements.txt`
     - Conda: `conda install pymssql; conda install -c conda-forge python-decouple`
 3. Create a `.env` file in the root directory containing the following information about your Azure SQL database
-```commandline
-Server=<name of your azure server, without .database.windows.net>
-DBName=<Name of your Database>
-UserID=<Database username>
-Password=<Database password>
-```
+   ```commandline
+   Server=<Server name, without '.database.windows.net'>
+   DBName=<Database name>
+   UserID=<Database username>
+   Password=<Database password>
+   ```
 4. Run `src/main/resources/create.sql` on your Azure SQL database.
 
 ## Usage
 
 Run `src/main/scheduler/Scheduler.py`
 
+
+## Todo
+
+Add support for self-hosted SQL Server backends.
