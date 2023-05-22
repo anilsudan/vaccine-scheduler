@@ -30,14 +30,14 @@ class Patient:
         cm = ConnectionManager()
         conn = cm.create_connection()
         cursor = conn.cursor(as_dict=True)
-        get_patient_details = f'SELECT Salt, Hash FROM Caregivers WHERE Username = {self._uname}'
+        get_patient_details = "SELECT Salt, Hash FROM Patients WHERE Username = %s"
         try:
-            conn.execute(get_patient_details)
+            cursor.execute(get_patient_details, self._uname)
             for row in cursor:
                 curr_salt = row['Salt']
                 curr_hash = row['Hash']
                 calculated_hash = Util.generate_hash(self._pw, curr_salt)
-                if calculated_hash != curr_hash:
+                if not calculated_hash == curr_hash:
                     # Incorrect PW entered by user
                     cm.close_connection()
                     return None
@@ -71,9 +71,10 @@ class Patient:
         cm = ConnectionManager()
         conn = cm.create_connection()
         curr = conn.cursor()
-        add_patient = f'INSERT INTO Patients VALUES ({self._uname, self._salt, self._hash})'
+        add_patient = "INSERT INTO Patients VALUES (%s, %s, %s)"
         try:
-            curr.execute(add_patient)
+            curr.execute(add_patient, (self._uname, self._salt, self._hash))
+            conn.commit()
         except pymssql.Error as e:
             raise e
         finally:

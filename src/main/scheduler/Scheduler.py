@@ -17,55 +17,23 @@ current_patient = None
 current_caregiver = None
 
 
-def create_patient(tokens):
+def uname_exists(username: str, table: str) -> bool:
     """
-    TODO: Part 1
+    Checks if a given username exists in the database, for either Patients or Caregivers.
+    Will error if given an incorrect name.
+    @param username: str, username to check
+    @param table: str, either 'Patients' or 'Caregivers'
+    @return: bool, true if the username exists and false if it does not.
     """
-    pass
-
-
-def create_caregiver(tokens):
-    # create_caregiver <username> <password>
-    # check 1: the length for tokens need to be exactly 3 to include all information (with the operation name)
-    if len(tokens) != 3:
-        print("Failed to create user.")
-        return
-
-    username = tokens[1]
-    password = tokens[2]
-    # check 2: check if the username has been taken already
-    if username_exists_caregiver(username):
-        print("Username taken, try again!")
-        return
-
-    salt = Util.generate_salt()
-    hash = Util.generate_hash(password, salt)
-
-    # create the caregiver
-    caregiver = Caregiver(username, salt=salt, hash=hash)
-
-    # save to caregiver information to our database
-    try:
-        caregiver.save_to_db()
-    except pymssql.Error as e:
-        print("Failed to create user.")
-        print("Db-Error:", e)
-        quit()
-    except Exception as e:
-        print("Failed to create user.")
-        print(e)
-        return
-    print("Created user ", username)
-
-
-def username_exists_caregiver(username):
+    # check for valid table input
+    if table != 'Caregivers' and table != 'Patients':
+        raise Exception('Bad table input -- you should not see this :)')
     cm = ConnectionManager()
     conn = cm.create_connection()
-
-    select_username = "SELECT * FROM Caregivers WHERE Username = %s"
+    select_username = f"SELECT * FROM {table} WHERE Username = '{username}'"
     try:
         cursor = conn.cursor(as_dict=True)
-        cursor.execute(select_username, username)
+        cursor.execute(select_username)
         #  returns false if the cursor is not before the first record or if there are no rows in the ResultSet.
         for row in cursor:
             return row['Username'] is not None
@@ -81,15 +49,111 @@ def username_exists_caregiver(username):
     return False
 
 
-def login_patient(tokens):
+def create_caregiver(tokens: list) -> None:
     """
-    TODO: Part 1
+    Creates caregiver in DB given user input.
+    @param tokens: list, contains user input, valid format ['create_caregiver', 'username', 'password']
+    @return: None, prints status in console and commits valid info to DB
     """
-    pass
+    # check 1: the length for tokens need to be exactly 3 to include all information (with the operation name)
+    if len(tokens) != 3:
+        print("Failed to create user.")
+        return
+    username = tokens[1]
+    password = tokens[2]
+    # check 2: check if the username has been taken already
+    if uname_exists(username, 'Caregivers'):
+        print(f'Username taken, try again!')
+        return
+    salt = Util.generate_salt()
+    uhash = Util.generate_hash(password, salt)
+    # create the caregiver
+    caregiver = Caregiver(username, salt=salt, uhash=uhash)
+    # save to caregiver information to our database
+    try:
+        caregiver.save_to_db()
+    except pymssql.Error as e:
+        print("Failed to create user.")
+        print("Db-Error:", e)
+        quit()
+    except Exception as e:
+        print("Failed to create user.")
+        print(e)
+        return
+    print("Created user ", username)
 
 
-def login_caregiver(tokens):
-    # login_caregiver <username> <password>
+def create_patient(tokens: list) -> None:
+    """
+    Creates patient in DB given user input.
+    @param tokens: list, contains user input, only valid format ['create_patient', 'username', 'password']
+    @return: None, prints status in console and commits valid info to DB.
+    """
+    # Ensure valid input
+    if len(tokens) != 3:
+        print(f'Error: Failed to create user (username and password required)')
+        return None
+    uname = tokens[1]
+    pw = tokens[2]
+    # Ensure username does not already exist.
+    if uname_exists(uname, 'Patients'):
+        print('Username taken, try again!')
+        return
+    salt = Util.generate_salt()
+    uhash = Util.generate_hash(pw, salt)
+    patient = Patient(uname, salt=salt, uhash=uhash)
+    try:
+        patient.save_to_db()
+    except pymssql.Error as e:
+        print(f'Failed to create user.')
+        print(f'Db-Error: {e}')
+        return
+    except Exception as e:
+        print(f'Failed to create user.')
+        print(f'Exception: {e}')
+        return
+    print(f'Created user {uname}')
+
+
+def login_patient(tokens: list) -> None:
+    """
+    Logs in patient given user input.  Requires valid username-password combination.
+    @param tokens: list, contains user input, only valid format ['login_patient', 'username', 'password']
+    @return: None, prints status in console and sets current logged in patient.
+    """
+    global current_patient
+    if current_caregiver is not None or current_patient is not None:
+        print('User already logged in.')
+        return
+    if len(tokens) != 3:
+        print('Login failed.')
+        return
+    uname = tokens[1]
+    pw = tokens[2]
+    patient = None
+    try:
+        patient = Patient(uname, password=pw).get()
+    except pymssql.Error as e:
+        print("Login failed.")
+        print("Db-Error:", e)
+        quit()
+    except Exception as e:
+        print("Login failed.")
+        print("Error:", e)
+        return
+    if patient is None:
+        print("Login failed.")
+    else:
+        print(f'Logged in as {uname}')
+        current_patient = patient
+
+
+def login_caregiver(tokens: list) -> None:
+    """
+    Logs in caregiver given user input.  Requires valid username-password combination.
+    @param tokens: list, contains user input, only valid format ['login_patient', 'username', 'password']
+    @return: None, prints status in console and sets current logged in caregiver.
+    """
     # check 1: if someone's already logged-in, they need to log out first
     global current_caregiver
     if current_caregiver is not None or current_patient is not None:
@@ -238,9 +302,9 @@ def add_doses(tokens):
 
 
 def show_appointments(tokens):
-    '''
+    """
     TODO: Part 2
-    '''
+    """
     pass
 
 

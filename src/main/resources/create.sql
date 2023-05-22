@@ -5,6 +5,13 @@ CREATE TABLE Caregivers (
     PRIMARY KEY (Username)
 );
 
+CREATE TABLE Patients (
+    Username VARCHAR(255),
+    Salt BINARY(16),
+    Hash BINARY(16),
+    PRIMARY KEY (Username)
+);
+
 CREATE TABLE Availabilities (
     Time DATE,
     Username VARCHAR(255) REFERENCES Caregivers,
