@@ -1,17 +1,17 @@
+import pymssql
 import sys
 sys.path.append("../util/*")
 sys.path.append("../db/*")
-from util.Util import Util
-from db.ConnectionManager import ConnectionManager
-import pymssql
+from util.Util import Util # noqa
+from db.ConnectionManager import ConnectionManager # noqa
 
 
 class Caregiver:
-    def __init__(self, username, password=None, salt=None, hash=None):
+    def __init__(self, username, password=None, salt=None, uhash=None):
         self.username = username
         self.password = password
         self.salt = salt
-        self.hash = hash
+        self.hash = uhash
 
     # getters
     def get(self):

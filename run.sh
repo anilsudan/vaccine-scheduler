@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 
 source env/bin/activate
 python src/main/scheduler/Scheduler.py
