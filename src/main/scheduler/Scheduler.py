@@ -5,6 +5,7 @@ from util.Util import Util
 from db.ConnectionManager import ConnectionManager
 import pymssql
 import datetime
+from operator import itemgetter
 
 
 '''
@@ -15,6 +16,8 @@ Note: it is always true that at most one of currentCaregiver and currentPatient 
 current_patient = None
 
 current_caregiver = None
+
+DATE_FORMAT = '%Y-%m-%d'
 
 
 def uname_exists(username: str, table: str) -> bool:
@@ -188,11 +191,15 @@ def login_caregiver(tokens: list) -> None:
         current_caregiver = caregiver
 
 
-def search_caregiver_schedule(tokens):
+def search_caregiver_schedule(tokens) -> None:
     """
+    Searches for available reservations for a given date, printing out the date and the number of Vaccines available.
+    @param tokens: list contains user input.  Must be form 'search_caregiver_schedule YYYY-MM-DD
+    @return: None, prints status to console.
     """
     global current_caregiver
     global current_patient
+    global DATE_FORMAT
     # Ensure someone logs in.
     if current_caregiver is None and current_patient is None:
         print('Error: Please login first!')
@@ -203,7 +210,7 @@ def search_caregiver_schedule(tokens):
         return
     # Format date nicely
     try:
-        date = datetime.datetime.strptime(tokens[1], '%Y-%m-%d')
+        date = datetime.datetime.strptime(tokens[1], DATE_FORMAT)
     except ValueError as e:
         print(f'Error: Could not read date')
         print(f'Datetime Error - {e}')
@@ -223,19 +230,30 @@ def search_caregiver_schedule(tokens):
                           'ON AP.AppointmentID = AV.AppointmentID ' \
                           'WHERE AP.AppointmentID is null AND AV.Date = %s'
         try:
+            slots = []
             cursor.execute(grab_caregivers, str(date.date()))
-            print(f'Available Appointments on {str(date.date())}')
             for row in cursor:
-                print(f'{row["AppointmentID"]} {row["CaregiverID"]}')
+                slots.append(f'{row["AppointmentID"]} {row["CaregiverID"]}')
+            if len(slots) == 0:
+                print(f'Sorry, no appointments available for {date}')
+                cm.close_connection()
+                return
+            else:
+                print('Currently available reservations:')
+                for row in slots:
+                    print(row)
+                print('Current Vaccine Availability')
+                # Print out current amounts of vaccines
+                for row in vaccines:
+                    print(row)
+                cm.close_connection()
+                return
         except pymssql.Error as e:
             print('Error: Could not grab caregiver availability')
             print(f'Db-Msg:{e}')
             return
-        print('Current Vaccine Availability')
-        # Print out current amounts of vaccines
-        for row in vaccines:
-            print(row)
-        return
+        except Exception as e:
+            print(f'Error: {e}')
     except pymssql.Error as e:
         print('Error: Could not connect to DB and/or grab vaccine info.')
         print(f'DB-Msg: {e}')
@@ -243,23 +261,120 @@ def search_caregiver_schedule(tokens):
     except Exception as e:
         print(f'Error: {e}')
         return
-
-
-
-
+    finally:
+        cm.close_connection()
 
 
 def reserve(tokens):
     """
-    TODO: Part 2
     """
-    pass
+    # Check if user is logged in as patient
+    global current_patient, current_caregiver
+    if current_patient is None and current_caregiver is None:
+        print('Error: Please login first.')
+        return
+    elif current_patient is None:
+        print('Error: Please login as a patient.')
+        return
+
+    # Ensure valid input
+    if len(tokens) != 3:
+        print(f'Error: Please provide valid date {DATE_FORMAT} and vaccine information.')
+        return
+    # Ensure valid date
+    try:
+        date = datetime.datetime.strptime(tokens[1], DATE_FORMAT)
+    except ValueError as e:
+        print(f'Error: Could not read date')
+        print(f'Datetime Error - {e}')
+        return
+    vac_name = tokens[2]
+
+    # Queries used :)
+    check_vaccine_amt = 'SELECT Doses FROM Vaccines V WHERE V.Name = %s'
+    grab_caregivers = 'SELECT AV.AppointmentID, AV.CaregiverID ' \
+                      'FROM Availabilities AV LEFT JOIN Appointments AP ' \
+                      'ON AP.AppointmentID = AV.AppointmentID ' \
+                      'WHERE AP.AppointmentID is null AND AV.Date = %s'
+    add_apt = 'INSERT INTO Appointments VALUES (%s, %s, %s)'
+
+    cm = ConnectionManager()
+    conn = cm.create_connection()
+    cursor = conn.cursor(as_dict=True)
+    # Check to ensure that there is enough of the specified vaccine in reserve.
+    try:
+        cursor.execute(check_vaccine_amt, vac_name)
+        for row in cursor:
+            dose_amt = row['Doses']
+    except pymssql.Error as e:
+        print('Error: Could not check Vaccine dose amount')
+        print(f'Db-Msg: {e}')
+        return
+    except Exception as e:
+        print(f'Error: {e}')
+        return
+    if dose_amt < 1:
+        print(f'Sorry, there are not enough doses of {vac_name} vaccine.')
+        return
+
+    # Check for open appointments on this date.
+    apps = []
+    try:
+        cursor.execute(grab_caregivers, date)
+        for row in cursor:
+            apps.append([row['AppointmentID'], row['CaregiverID']])
+    except pymssql.Error as e:
+        print('Error: Could not check Vaccine dose amount')
+        print(f'Db-Msg: {e}')
+        return
+    except Exception as e:
+        print(f'Error: {e}')
+        return
+    if len(apps) < 1:
+        print(f'Sorry, there are no open appointments on {date}.')
+        return
+
+    # Choose the appointment based on the person's name, sorted alphabetically
+    apps = sorted(apps, key=itemgetter(1))
+    apt = apps[0]
+
+    # Decrease vaccine amount
+    try:
+        vac = Vaccine(vac_name, dose_amt)
+        vac.decrease_available_doses(1)
+    except pymssql.Error as e:
+        print('Error: Could not update vaccine count.')
+        print(f'Db-Msg: {e}')
+        return
+    except Exception as e:
+        print(f'Error: {e}')
+        return
+
+    # Add this appointment to the table
+    try:
+        cursor.execute(add_apt, (apt[0], vac_name, current_patient.get_username()))
+        conn.commit()
+    except pymssql.Error as e:
+        vac.increase_available_doses(1)  # RESET VACCINE DOSES
+        print('Error: Could not add appointment.')
+        print(f'Db-Msg: {e}')
+        return
+    except Exception as e:
+        vac.increase_available_doses(1)  # RESET VACCINE DOSES
+        print(f'Error: {e}')
+        return
+
+    # If this executes, then everything has been updated correctly
+    print('Vaccine appointment scheduled!')
+    print(f'Appointment ID: {apt[0]}, Caregiver: {apt[1]}')
+    cm.close_connection()
+    return
 
 
 def upload_availability(tokens):
     #  upload_availability <date>
     #  check 1: check if the current logged-in user is a caregiver
-    global current_caregiver
+    global current_caregiver, DATE_FORMAT
     if current_caregiver is None:
         print("Please login as a caregiver first!")
         return
@@ -269,21 +384,15 @@ def upload_availability(tokens):
         print("Please try again!")
         return
 
-    date = tokens[1]
-    # assume input is hyphenated in the format mm-dd-yyyy
-    date_tokens = date.split("-")
-    month = int(date_tokens[0])
-    day = int(date_tokens[1])
-    year = int(date_tokens[2])
     try:
-        d = datetime.datetime(year, month, day)
+        d = datetime.datetime.strptime(tokens[1], DATE_FORMAT)
         current_caregiver.upload_availability(d)
     except pymssql.Error as e:
         print("Upload Availability Failed")
         print("Db-Error:", e)
         quit()
     except ValueError:
-        print("Please enter a valid date!")
+        print(f"Error: Please enter a valid date in format {DATE_FORMAT}")
         return
     except Exception as e:
         print("Error occurred when uploading availability")
@@ -294,9 +403,97 @@ def upload_availability(tokens):
 
 def cancel(tokens):
     """
-    TODO: Extra Credit
     """
-    pass
+    global current_caregiver, current_patient
+    # Ensure a user is logged in
+    if current_caregiver is None and current_patient is None:
+        print('Error: Please login first!')
+        return
+    # Ensure an ID was provided
+    if len(tokens) != 2:
+        print('Error: Please provide an AppointmentID to cancel.')
+    cm = ConnectionManager()
+    conn = cm.create_connection()
+    cursor = conn.cursor(as_dict=True)
+    vac_query = 'SELECT AP.VaccineType FROM Appointments AP WHERE AP.AppointmentID = %s'
+    del_query = 'DELETE FROM Appointments WHERE AppointmentID = %s'
+    # If currently logged in as patient
+    if current_caregiver is None:
+        query = 'SELECT AP.PatientID FROM Appointments AP WHERE AP.AppointmentID = %s'
+        try:
+            cursor.execute(query, tokens[1])
+            id_from_db = None
+            for row in cursor:
+                id_from_db = row['PatientID']
+            if id_from_db is None:
+                print('Error: Appointment not found.')
+            elif id_from_db != current_patient.get_username():
+                print('Error: This appointment is not registered under your user account.')
+                return
+            else:
+                try:
+                    cursor.execute(vac_query, tokens[1])
+                    for row in cursor:
+                        vac_name = str(row['VaccineType'])
+                    vac = Vaccine(vac_name, 'DUMMY').get()
+                    vac.increase_available_doses(1)
+                    cursor.execute(del_query, tokens[1])
+                    conn.commit()
+                    print('Appointment successfully cancelled!')
+                except pymssql.Error as e:
+                    print('Error: Could not cancel appointment.')
+                    print(f'Db-Msg: {e}')
+                except Exception as e:
+                    print('Error: Please try again!')
+                    print(e)
+        except pymssql.Error as e:
+            print('Error: Could not lookup appointment.')
+            print(f'Db-Msg: {e}')
+        except Exception as e:
+            print('Error: Please try again!')
+            print(e)
+        finally:
+            cm.close_connection()
+            return
+    # If currently logged in as caregiver
+    elif current_patient is None:
+        query = 'SELECT AV.CaregiverID FROM Availabilities AV, Appointments AP ' \
+                'WHERE AV.AppointmentID = AP.AppointmentID AND AV.AppointmentID = %s'
+        try:
+            cursor.execute(query, tokens[1])
+            id_from_db = None
+            for row in cursor:
+                id_from_db = row['CaregiverID']
+            if id_from_db is None:
+                print('Error: Appointment not Found')
+            elif id_from_db != current_caregiver.get_username():
+                print('Error: This appointment is not registered under your user account.')
+            else:
+                try:
+                    cursor.execute(vac_query, tokens[1])
+                    for row in cursor:
+                        vac_name = row['VaccineType']
+                    vac = Vaccine(vac_name, 'DUMMY').get()
+                    vac.increase_available_doses(1)
+                    cursor.execute(del_query, tokens[1])
+                    conn.commit()
+                    print('Appointment successfully cancelled!')
+                    print('Note: This date will be marked as available and be reservable by other patients.')
+                except pymssql.Error as e:
+                    print('Error: Could not cancel appointment.')
+                    print(f'Db-Msg: {e}')
+                except Exception as e:
+                    print('Error: Please try again!')
+                    print(e)
+        except pymssql.Error as e:
+            print('Error: Could not lookup appointment.')
+            print(f'Db-Msg: {e}')
+        except Exception as e:
+            print('Error: Please try again!')
+            print(e)
+        finally:
+            cm.close_connection()
+            return
 
 
 def add_doses(tokens):
@@ -357,9 +554,71 @@ def add_doses(tokens):
 
 def show_appointments(tokens):
     """
-    TODO: Part 2
     """
-    pass
+    global current_caregiver, current_patient
+    cm = ConnectionManager()
+    conn = cm.create_connection()
+    cursor = conn.cursor(as_dict=True)
+    # if user is not logged in
+    if current_caregiver is None and current_patient is None:
+        print('Error: Please login first.')
+    # If user is a patient
+    elif current_caregiver is None:
+        user = current_patient.get_username() # noqa
+        grab_patient_apts = 'SELECT AP.AppointmentID, AP.VaccineType, AV.Date, AV.CaregiverID ' \
+                            'FROM Appointments AP, Availabilities AV ' \
+                            'WHERE AP.AppointmentId = AV.AppointmentId AND AP.PatientID = %s ' \
+                            'ORDER BY AppointmentID'
+        try:
+            cursor.execute(grab_patient_apts, user)
+            apts = []
+            for row in cursor:
+                apts.append([row['AppointmentID'], row['VaccineType'], row['Date'], row['CaregiverID']])
+            cm.close_connection()
+            if len(apts) == 0:
+                print(f'No current appointments are scheduled for {user}')
+                return
+            else:
+                print(f'Current appointments scheduled for {user}')
+                for apt in apts:
+                    print(f'{apt[0]} {apt[1]} {apt[2]} {apt[3]}')
+                return
+        except pymssql.Error as e:
+            print('Error: Could not lookup appointments.')
+            print(f'Db-Msg: {e}')
+            return
+        except Exception as e:
+            print('Please try again!')
+            print(f'Error: {e}')
+            return
+    # If user is a caregiver
+    elif current_patient is None:
+        user = current_caregiver.get_username()
+        grab_patient_apts = 'SELECT AP.AppointmentID, AP.VaccineType, AV.Date, AP.PatientID ' \
+                            'FROM Appointments AP, Availabilities AV ' \
+                            'WHERE AP.AppointmentId = AV.AppointmentId AND AV.CaregiverID = %s ' \
+                            'ORDER BY AppointmentID'
+        try:
+            cursor.execute(grab_patient_apts, user)
+            apts = []
+            for row in cursor:
+                apts.append([row['AppointmentID'], row['VaccineType'], row['Date'], row['PatientID']])
+            cm.close_connection()
+            if len(apts) == 0:
+                print(f'No current appointments are scheduled for {user}')
+                return
+            else:
+                print(f'Current appointments scheduled for {user}')
+                for apt in apts:
+                    print(f'{apt[0]} {apt[1]} {apt[2]} {apt[3]}')
+                return
+        except pymssql.Error as e:
+            print('Error: Could not lookup appointments.')
+            print(f'Db-Msg: {e}')
+            return
+        except Exception as e:
+            print(f'Please try again! {e}')
+            return
 
 
 def logout(tokens):
@@ -431,6 +690,8 @@ def start():
             show_appointments(tokens)
         elif operation == "logout":
             logout(tokens)
+        elif operation == "cancel":
+            cancel(tokens)
         elif operation == "quit":
             print("Bye!")
             stop = True

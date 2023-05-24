@@ -15,7 +15,7 @@ class Vaccine:
         conn = cm.create_connection()
         cursor = conn.cursor()
 
-        get_vaccine = f'"SELECT Name, Doses FROM Vaccines WHERE Name = {self._vaccine_name}'
+        get_vaccine = f'SELECT Name, Doses FROM Vaccines WHERE Name = %s'
         try:
             cursor.execute(get_vaccine, self.vaccine_name)
             for row in cursor:
