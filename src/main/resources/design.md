@@ -35,13 +35,11 @@ Appointment ID will come from hash(date, caregiverid) in python
 - PRIMARY KEY(CaregiverID, Date)
 
 ## Usage
+Appointments is a subset of availabilities.
 - To find all open appointments on a certain day, join Availabilities and Appointments on
 CaregiverID and Date, then find those without a match.
 
 ## Find Open Appointments
 ```SQL
-SELECT <whatever>
-FROM Availabilities AV
-LEFT OUTER JOIN Appointments AP ON AV.CaregiverID = AP.CaregiverID AND AV.Date = AP.Date
-WHERE (VALUE is NULL); 
+SELECT AP.AppointmentID, AP.CaregiverID FROM [dbo].[Availabilities] AP LEFT JOIN [dbo].[Appointments] AV ON AP.AppointmentID = AV.AppointmentID WHERE AV.AppointmentID is null;
 ```

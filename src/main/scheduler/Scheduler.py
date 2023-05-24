@@ -190,9 +190,63 @@ def login_caregiver(tokens: list) -> None:
 
 def search_caregiver_schedule(tokens):
     """
-    TODO: Part 2
     """
-    pass
+    global current_caregiver
+    global current_patient
+    # Ensure someone logs in.
+    if current_caregiver is None and current_patient is None:
+        print('Error: Please login first!')
+        return
+    # Ensure date was provided
+    if len(tokens) != 2:
+        print('Error: Please provide date!')
+        return
+    # Format date nicely
+    try:
+        date = datetime.datetime.strptime(tokens[1], '%Y-%m-%d')
+    except ValueError as e:
+        print(f'Error: Could not read date')
+        print(f'Datetime Error - {e}')
+        return
+    # Grab available vaccines and caregivers
+    try:
+        cm = ConnectionManager()
+        conn = cm.create_connection()
+        cursor = conn.cursor(as_dict=True)
+        grab_vaccines = 'SELECT Name, Doses FROM Vaccines;'
+        cursor.execute(grab_vaccines)
+        vaccines = []
+        for row in cursor:
+            vaccines.append(f'{row["Name"]} {row["Doses"]}')
+        grab_caregivers = 'SELECT AV.AppointmentID, AV.CaregiverID ' \
+                          'FROM Availabilities AV LEFT JOIN Appointments AP ' \
+                          'ON AP.AppointmentID = AV.AppointmentID ' \
+                          'WHERE AP.AppointmentID is null AND AV.Date = %s'
+        try:
+            cursor.execute(grab_caregivers, str(date.date()))
+            print(f'Available Appointments on {str(date.date())}')
+            for row in cursor:
+                print(f'{row["AppointmentID"]} {row["CaregiverID"]}')
+        except pymssql.Error as e:
+            print('Error: Could not grab caregiver availability')
+            print(f'Db-Msg:{e}')
+            return
+        print('Current Vaccine Availability')
+        # Print out current amounts of vaccines
+        for row in vaccines:
+            print(row)
+        return
+    except pymssql.Error as e:
+        print('Error: Could not connect to DB and/or grab vaccine info.')
+        print(f'DB-Msg: {e}')
+        return
+    except Exception as e:
+        print(f'Error: {e}')
+        return
+
+
+
+
 
 
 def reserve(tokens):
@@ -310,9 +364,16 @@ def show_appointments(tokens):
 
 def logout(tokens):
     """
-    TODO: Part 2
     """
-    pass
+    global current_caregiver, current_patient
+    if current_caregiver is None and current_patient is None:
+        print('Error: Log in first.')
+        return
+    else:
+        current_caregiver = None
+        current_patient = None
+        print('Successfully logged out!')
+        return
 
 
 def start():

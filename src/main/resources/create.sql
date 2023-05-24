@@ -16,16 +16,14 @@ CREATE TABLE Patients (
 );
 
 CREATE TABLE Availabilities (
-    CaregiverID VARCHAR(255) REFERENCES Caregivers,
-    Date DATE,
-    PRIMARY KEY (CaregiverID, Date)
+    CaregiverID VARCHAR(255) REFERENCES Caregivers NOT NULL,
+    Date DATE NOT NULL,
+    AppointmentID VARCHAR(36) PRIMARY KEY,
+    CONSTRAINT scheduled UNIQUE(CaregiverID, DATE)
 );
 
 CREATE TABLE Appointments (
-    AppointmentID INT UNIQUE
-    Date DATE
-    CaregiverID VARCHAR(255)
+    AppointmentID VARCHAR(36) REFERENCES Availabilities NOT NULL PRIMARY KEY,
     VaccineType VARCHAR(255) REFERENCES Vaccines,
     PatientID VARCHAR(255) REFERENCES Patients,
-	FOREIGN KEY (CaregiverID, Date) REFERENCES Availabilities (CaregiverID, Date)
 );

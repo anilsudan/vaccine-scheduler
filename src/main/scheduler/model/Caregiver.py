@@ -1,4 +1,5 @@
 import pymssql
+import uuid
 import sys
 sys.path.append("../util/*")
 sys.path.append("../db/*")
@@ -70,10 +71,11 @@ class Caregiver:
         cm = ConnectionManager()
         conn = cm.create_connection()
         cursor = conn.cursor()
-
-        add_availability = "INSERT INTO Availabilities VALUES (%s , %s)"
+        # Generate AppointmentID
+        appt_id: str = str(uuid.uuid4())
+        add_availability = "INSERT INTO Availabilities VALUES (%s , %s, %s)"
         try:
-            cursor.execute(add_availability, (d, self.username))
+            cursor.execute(add_availability, (self.username, d, appt_id))
             # you must call commit() to persist your data if you don't set autocommit to True
             conn.commit()
         except pymssql.Error:
