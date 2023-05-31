@@ -8,15 +8,13 @@ import datetime
 from operator import itemgetter
 
 
-'''
-objects to keep track of the currently logged-in user
-Note: it is always true that at most one of currentCaregiver and currentPatient is not null
-        since only one user can be logged-in at a time
-'''
+# Objects for containing current user information
+# None -> logged out
 current_patient = None
-
 current_caregiver = None
 
+# Date format used by program, printed for users on startup
+# Eg: %Y-%m-%d -> YYYY-MM-DD
 DATE_FORMAT = '%Y-%m-%d'
 
 
@@ -121,12 +119,13 @@ def create_patient(tokens: list) -> None:
 def login_patient(tokens: list) -> None:
     """
     Logs in patient given user input.  Requires valid username-password combination.
+    Only accessible if no one is logged in.
     @param tokens: list, contains user input, only valid format ['login_patient', 'username', 'password']
     @return: None, prints status in console and sets current logged in patient.
     """
     global current_patient
     if current_caregiver is not None or current_patient is not None:
-        print('User already logged in.')
+        print('You are already logged in, please logout first.')
         return
     if len(tokens) != 3:
         print('Login failed.')
@@ -154,6 +153,7 @@ def login_patient(tokens: list) -> None:
 def login_caregiver(tokens: list) -> None:
     """
     Logs in caregiver given user input.  Requires valid username-password combination.
+    Only accessible if no user is logged in.
     @param tokens: list, contains user input, only valid format ['login_patient', 'username', 'password']
     @return: None, prints status in console and sets current logged in caregiver.
     """
@@ -194,6 +194,7 @@ def login_caregiver(tokens: list) -> None:
 def search_caregiver_schedule(tokens) -> None:
     """
     Searches for available reservations for a given date, printing out the date and the number of Vaccines available.
+    Accessible for both caregivers and patients.
     @param tokens: list contains user input.  Must be form 'search_caregiver_schedule YYYY-MM-DD
     @return: None, prints status to console.
     """
@@ -216,10 +217,10 @@ def search_caregiver_schedule(tokens) -> None:
         print(f'Datetime Error - {e}')
         return
     # Grab available vaccines and caregivers
+    cm = ConnectionManager()
+    conn = cm.create_connection()
+    cursor = conn.cursor(as_dict=True)
     try:
-        cm = ConnectionManager()
-        conn = cm.create_connection()
-        cursor = conn.cursor(as_dict=True)
         grab_vaccines = 'SELECT Name, Doses FROM Vaccines;'
         cursor.execute(grab_vaccines)
         vaccines = []
@@ -267,6 +268,13 @@ def search_caregiver_schedule(tokens) -> None:
 
 def reserve(tokens):
     """
+    Reserves appointment for the currently logged-in user on the supplied date with the supplied vaccine
+    For an appointment to be successfully reserved, there must be an available caregiver on said date,
+    with at least 1 of the vaccine specified in stockpile.
+    If more than one caregiver is available on a certain day, patients will be assigned to the caregivers whose ID
+    comes first alphabetically.
+    @param tokens: list, contains user input, only valid format ['reserve', 'DATE', 'vaccine name']
+    @return: None, prints status in console and sets current logged in patient.
     """
     # Check if user is logged in as patient
     global current_patient, current_caregiver
@@ -302,6 +310,7 @@ def reserve(tokens):
     conn = cm.create_connection()
     cursor = conn.cursor(as_dict=True)
     # Check to ensure that there is enough of the specified vaccine in reserve.
+    dose_amt = -1
     try:
         cursor.execute(check_vaccine_amt, vac_name)
         for row in cursor:
@@ -352,7 +361,7 @@ def reserve(tokens):
 
     # Add this appointment to the table
     try:
-        cursor.execute(add_apt, (apt[0], vac_name, current_patient.get_username()))
+        cursor.execute(add_apt, (apt[0], vac_name, current_patient.get_username()))  # noqa 356
         conn.commit()
     except pymssql.Error as e:
         vac.increase_available_doses(1)  # RESET VACCINE DOSES
@@ -372,7 +381,12 @@ def reserve(tokens):
 
 
 def upload_availability(tokens):
-    #  upload_availability <date>
+    """
+    Marks the currently logged in caregiver as available for the date specified.
+    Only accessible to caregivers.
+    @param tokens: list, contains user input, only valid format ['reserve', 'DATE', 'vaccine name']
+    @return: None, prints status in console and makes changes in DB.
+    """
     #  check 1: check if the current logged-in user is a caregiver
     global current_caregiver, DATE_FORMAT
     if current_caregiver is None:
@@ -403,6 +417,10 @@ def upload_availability(tokens):
 
 def cancel(tokens):
     """
+    Cancels an appointment given a valid appointment ID.
+    Accessible to both patients and caregivers.
+    @param tokens: list, contains user input, valid format ['cancel', '<ID>']
+    @return: None, prints output in console and changes DB.
     """
     global current_caregiver, current_patient
     # Ensure a user is logged in
@@ -435,7 +453,7 @@ def cancel(tokens):
                     cursor.execute(vac_query, tokens[1])
                     for row in cursor:
                         vac_name = str(row['VaccineType'])
-                    vac = Vaccine(vac_name, 'DUMMY').get()
+                    vac = Vaccine(vac_name).get()
                     vac.increase_available_doses(1)
                     cursor.execute(del_query, tokens[1])
                     conn.commit()
@@ -473,7 +491,7 @@ def cancel(tokens):
                     cursor.execute(vac_query, tokens[1])
                     for row in cursor:
                         vac_name = row['VaccineType']
-                    vac = Vaccine(vac_name, 'DUMMY').get()
+                    vac = Vaccine(vac_name).get()
                     vac.increase_available_doses(1)
                     cursor.execute(del_query, tokens[1])
                     conn.commit()
@@ -497,7 +515,11 @@ def cancel(tokens):
 
 
 def add_doses(tokens):
-    #  add_doses <vaccine> <number>
+    """
+    Adds doses of a given vaccine name
+    @param tokens: list containing user input, format ['add_doses', 'vaccine name', 'doses']
+    @return:
+    """
     #  check 1: check if the current logged-in user is a caregiver
     global current_caregiver
     if current_caregiver is None:
@@ -623,7 +645,12 @@ def show_appointments(tokens):
 
 def logout(tokens):
     """
+    @param tokens:
+    @return:
     """
+    if len(tokens) != 1:
+        print('Error: Unknown arguments supplied.')
+        return
     global current_caregiver, current_patient
     if current_caregiver is None and current_patient is None:
         print('Error: Log in first.')
@@ -637,6 +664,8 @@ def logout(tokens):
 
 def start():
     stop = False
+    global DATE_FORMAT
+    print(f'Current Date Format: {DATE_FORMAT}')
     print()
     print(" *** Please enter one of the following commands *** ")
     print("> create_patient <username> <password>")  # //TODO: implement create_patient (Part 1)

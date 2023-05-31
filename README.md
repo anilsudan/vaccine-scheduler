@@ -45,6 +45,7 @@ venv - `./run.sh`
 
 conda - `conda activate vaccine-scheduler && python3 src/main/scheduler/Scheduler.py`
 
+Commands are shown on first launch.
 
 ## Todo
 
